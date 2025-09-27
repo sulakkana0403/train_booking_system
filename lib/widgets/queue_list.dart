@@ -1,33 +1,30 @@
 import 'package:flutter/material.dart';
-import '../services/queue_service.dart';
+import '../services/firestore_service.dart';
 
 class QueueList extends StatelessWidget {
-  final QueueService queueService;
-  const QueueList({super.key, required this.queueService});
+  final FirestoreService service;
+  const QueueList({super.key, required this.service});
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder(
-      stream: queueService.queueStream,
+      stream: service.queueStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(
-            child: Text('The queue is empty.', textAlign: TextAlign.center),
-          );
-        }
-        final queueDocs = snapshot.data!.docs;
+        if (!snapshot.hasData) return const Text('Loading queue...');
+        final qs = snapshot.data!.docs;
+        if (qs.isEmpty) return const Text('Queue is empty.');
         return ListView.separated(
-          itemCount: queueDocs.length,
+          itemCount: qs.length,
           separatorBuilder: (_, __) => const Divider(),
           itemBuilder: (context, index) {
-            final doc = queueDocs[index];
-            final name = doc['name'] ?? 'Unknown';
+            final doc = qs[index];
+            final data = doc.data() as Map<String, dynamic>;
+            final name = data['name'] ?? 'Unknown';
+            final seats = data.containsKey('seats') ? data['seats'] : 1;
             return ListTile(
               leading: CircleAvatar(child: Text('${index + 1}')),
               title: Text(name),
+              subtitle: Text('Seats: $seats'),
             );
           },
         );

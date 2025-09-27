@@ -4,62 +4,48 @@ class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final String trainDocId = 'train1';
 
-  // Stream for Train info
   Stream<DocumentSnapshot<Map<String, dynamic>>> get trainStream =>
       _db.collection('trains').doc(trainDocId).snapshots();
 
-  // Stream for Queue (FIFO)
   Stream<QuerySnapshot<Map<String, dynamic>>> get queueStream =>
-      _db
-          .collection('queue')
-          .orderBy('joinedAt', descending: false)
-          .snapshots();
+      _db.collection('queue').orderBy('joinedAt').snapshots();
 
-  // Customer joins the queue
-  Future<void> joinQueue(String name) async {
+  Future<void> joinQueue(String name, {int seats = 1}) async {
     if (name.trim().isEmpty) return;
     await _db.collection('queue').add({
       'name': name.trim(),
+      'seats': seats,
       'joinedAt': FieldValue.serverTimestamp(),
     });
   }
 
-  // Admin serves next customer
   Future<void> serveNextCustomer() async {
     final queueQuery =
-        await _db
-            .collection('queue')
-            .orderBy('joinedAt', descending: false)
-            .limit(1)
-            .get();
-
+        await _db.collection('queue').orderBy('joinedAt').limit(1).get();
     if (queueQuery.docs.isEmpty) return;
 
     final next = queueQuery.docs.first;
+    final data = next.data();
     final nextId = next.id;
-    final nextName = next['name'] ?? 'Unknown';
+    final nextName = data['name'] ?? 'Unknown';
+    final seats = data.containsKey('seats') ? data['seats'] : 1;
+
     final trainRef = _db.collection('trains').doc(trainDocId);
     final bookingRef = _db.collection('bookings').doc();
 
     await _db.runTransaction((transaction) async {
       final snapshot = await transaction.get(trainRef);
-      final data = snapshot.data();
-      if (data == null) throw Exception('Train not found');
-      final available = (data['availableSeats'] ?? 0) as int;
-      if (available <= 0) throw Exception('Tickets sold out');
+      final trainData = snapshot.data()!;
+      final available = (trainData['availableSeats'] ?? 0) as int;
+      if (available < seats) throw Exception('Not enough seats available');
 
-      // Update available seats
-      transaction.update(trainRef, {'availableSeats': available - 1});
-
-      // Create booking document
+      transaction.update(trainRef, {'availableSeats': available - seats});
       transaction.set(bookingRef, {
         'customerName': nextName,
         'trainId': trainDocId,
+        'seats': seats,
         'bookedAt': FieldValue.serverTimestamp(),
-        'seatNo': (data['totalSeats'] ?? 0) - (available - 1),
       });
-
-      // Remove customer from queue
       transaction.delete(_db.collection('queue').doc(nextId));
     });
   }

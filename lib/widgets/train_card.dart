@@ -10,22 +10,16 @@ class TrainCard extends StatelessWidget {
     return StreamBuilder(
       stream: service.trainStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const LinearProgressIndicator();
-        }
-        if (!snapshot.hasData || snapshot.data!.data() == null) {
-          return const Text('Train data not available.');
-        }
-
-        final data = snapshot.data!.data()!;
+        if (!snapshot.hasData) return const LinearProgressIndicator();
+        final data = snapshot.data!.data();
+        if (data == null) return const Text('Train not found.');
         final name = data['name'] ?? 'Train';
         final total = data['totalSeats'] ?? 0;
         final available = data['availableSeats'] ?? 0;
-
         return Card(
           child: ListTile(
-            title: Text(name),
-            subtitle: Text('Available Seats: $available / $total'),
+            title: Text(name.toString()),
+            subtitle: Text('Available: $available / $total'),
           ),
         );
       },
